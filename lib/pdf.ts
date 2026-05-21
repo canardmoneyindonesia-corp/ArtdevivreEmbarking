@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import { Answers, FormSchema, Question } from "./form-schema";
-import { Step as BriefStep } from "./brief-schema";
-import { QuestionAnswer } from "./use-brief-state";
+import { Block, QuestionLeafBlock, Step as BriefStep } from "./brief-schema";
+import { UseBriefState } from "./use-brief-state";
 
 const PAGE_MARGIN_X = 60;
 const PAGE_MARGIN_TOP = 70;
@@ -130,11 +130,7 @@ export function generatePdf(schema: FormSchema, answers: Answers) {
   doc.save(buildFilename(answers));
 }
 
-export function generateBriefPdf(
-  steps: BriefStep[],
-  getContent: (id: string) => string,
-  getAnswer: (id: string) => QuestionAnswer
-) {
+export function generateBriefPdf(steps: BriefStep[], state: UseBriefState) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -146,6 +142,107 @@ export function generateBriefPdf(
       doc.addPage();
       y = PAGE_MARGIN_TOP;
     }
+  }
+
+  function writeLines(text: string, indent = 0) {
+    const lines = doc.splitTextToSize(text, contentWidth - indent);
+    ensureSpace(lines.length * LINE_HEIGHT + 6);
+    doc.text(lines, PAGE_MARGIN_X + indent, y);
+    y += lines.length * LINE_HEIGHT + 4;
+  }
+
+  function renderLeaf(block: QuestionLeafBlock, indent = 0) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(20);
+
+    if (block.type === "multi-select") {
+      const a = state.getAnswer(block.id);
+      writeLines(
+        a.checked.length > 0 ? a.checked.map((c) => `• ${c}`).join("\n") : "—",
+        indent
+      );
+      if (a.freeText.trim()) writeLines(`Autre — ${a.freeText.trim()}`, indent);
+    } else if (block.type === "single-select") {
+      const v = state.getSingleChoice(block.id);
+      const a = state.getAnswer(block.id);
+      writeLines(v || "—", indent);
+      if (a.freeText.trim()) writeLines(`Autre — ${a.freeText.trim()}`, indent);
+    } else if (block.type === "grouped-select") {
+      const a = state.getAnswer(block.id);
+      for (const g of block.groups) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(80);
+        writeLines(g.label, indent);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(11);
+        doc.setTextColor(20);
+        const v =
+          g.selectionMode === "single"
+            ? state.getGroupedSingle(block.id, g.label)
+            : state.getGroupedMulti(block.id, g.label);
+        const display = Array.isArray(v)
+          ? v.length
+            ? v.map((x) => `• ${x}`).join("\n")
+            : "—"
+          : v || "—";
+        writeLines(display, indent);
+      }
+      if (a.freeText.trim()) writeLines(a.freeText.trim(), indent);
+    } else if (block.type === "free-text") {
+      for (const f of block.fields) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(80);
+        writeLines(f.label, indent);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(11);
+        doc.setTextColor(20);
+        const v = state.getFieldValue(block.id, f.id);
+        writeLines(v.trim() ? v : "—", indent);
+      }
+    } else {
+      // notes
+      const a = state.getAnswer(block.id);
+      writeLines(a.freeText.trim() ? a.freeText : "—", indent);
+    }
+  }
+
+  function renderBlock(block: Block) {
+    const heading =
+      "heading" in block && block.heading ? block.heading : block.id;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(60);
+    const hLines = doc.splitTextToSize(heading, contentWidth);
+    ensureSpace(hLines.length * LINE_HEIGHT + 8);
+    doc.text(hLines, PAGE_MARGIN_X, y);
+    y += hLines.length * LINE_HEIGHT * 0.9;
+
+    if (block.type === "text") {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.setTextColor(20);
+      writeLines(state.getContent(block.id) || "—");
+    } else if (block.type === "composite") {
+      for (const sub of block.blocks) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(110);
+        writeLines(sub.prompt, 12);
+        renderLeaf(sub, 12);
+      }
+    } else {
+      if ("prompt" in block && block.prompt) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(110);
+        writeLines(block.prompt);
+      }
+      renderLeaf(block);
+    }
+    y += 6;
   }
 
   doc.setFont("times", "normal");
@@ -176,57 +273,7 @@ export function generateBriefPdf(
     y += 18;
 
     for (const block of step.blocks) {
-      const heading =
-        "heading" in block && block.heading ? block.heading : block.id;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.setTextColor(60);
-      const hLines = doc.splitTextToSize(heading, contentWidth);
-      ensureSpace(hLines.length * LINE_HEIGHT + 8);
-      doc.text(hLines, PAGE_MARGIN_X, y);
-      y += hLines.length * LINE_HEIGHT * 0.9;
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(11);
-      doc.setTextColor(20);
-
-      if (block.type === "text") {
-        const text = getContent(block.id) || "—";
-        const lines = doc.splitTextToSize(text, contentWidth);
-        ensureSpace(lines.length * LINE_HEIGHT + 12);
-        doc.text(lines, PAGE_MARGIN_X, y);
-        y += lines.length * LINE_HEIGHT + 10;
-      } else if (block.type === "multi-select") {
-        const promptLines = doc.splitTextToSize(block.prompt, contentWidth);
-        ensureSpace(promptLines.length * LINE_HEIGHT + 8);
-        doc.setTextColor(80);
-        doc.text(promptLines, PAGE_MARGIN_X, y);
-        y += promptLines.length * LINE_HEIGHT + 6;
-        doc.setTextColor(20);
-
-        const answer = getAnswer(block.id);
-        const items =
-          answer.checked.length > 0
-            ? answer.checked.map((c) => `• ${c}`).join("\n")
-            : "—";
-        const aLines = doc.splitTextToSize(items, contentWidth);
-        ensureSpace(aLines.length * LINE_HEIGHT + 8);
-        doc.text(aLines, PAGE_MARGIN_X, y);
-        y += aLines.length * LINE_HEIGHT + 8;
-
-        if (answer.freeText.trim()) {
-          const free = `Autre — ${answer.freeText.trim()}`;
-          const fLines = doc.splitTextToSize(free, contentWidth);
-          ensureSpace(fLines.length * LINE_HEIGHT + 8);
-          doc.text(fLines, PAGE_MARGIN_X, y);
-          y += fLines.length * LINE_HEIGHT + 8;
-        }
-      } else {
-        const placeholder = doc.splitTextToSize("—", contentWidth);
-        ensureSpace(placeholder.length * LINE_HEIGHT + 8);
-        doc.text(placeholder, PAGE_MARGIN_X, y);
-        y += placeholder.length * LINE_HEIGHT + 8;
-      }
+      renderBlock(block);
     }
 
     y += 12;

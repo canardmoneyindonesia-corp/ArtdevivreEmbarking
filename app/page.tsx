@@ -71,12 +71,7 @@ export default function Home() {
                 exit={{ opacity: 0, y: -12 }}
                 transition={{ duration: 0.25, ease: "easeOut" }}
               >
-                <Recap
-                  steps={b.steps}
-                  getContent={b.getContent}
-                  getAnswer={b.getAnswer}
-                  onPrev={b.unfinish}
-                />
+                <Recap steps={b.steps} state={b} onPrev={b.unfinish} />
               </motion.div>
             ) : (
               <motion.div

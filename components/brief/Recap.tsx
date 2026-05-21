@@ -1,19 +1,148 @@
 "use client";
 
-import { Step } from "@/lib/brief-schema";
-import { QuestionAnswer } from "@/lib/use-brief-state";
+import { Block, QuestionLeafBlock, Step } from "@/lib/brief-schema";
+import { UseBriefState } from "@/lib/use-brief-state";
 import { generateBriefPdf } from "@/lib/pdf";
 
 type Props = {
   steps: Step[];
-  getContent: (id: string) => string;
-  getAnswer: (id: string) => QuestionAnswer;
+  state: UseBriefState;
   onPrev: () => void;
 };
 
-export function Recap({ steps, getContent, getAnswer, onPrev }: Props) {
+const DASH = <span className="text-[var(--color-muted)]">—</span>;
+
+function LeafView({
+  block,
+  state,
+}: {
+  block: QuestionLeafBlock;
+  state: UseBriefState;
+}) {
+  if (block.type === "multi-select") {
+    const a = state.getAnswer(block.id);
+    return (
+      <div className="flex flex-col gap-1 text-sm text-[var(--color-fg)]">
+        {a.checked.length > 0 ? (
+          <ul className="list-disc pl-5">
+            {a.checked.map((c) => (
+              <li key={c}>{c}</li>
+            ))}
+          </ul>
+        ) : (
+          DASH
+        )}
+        {a.freeText.trim() && (
+          <p className="text-sm text-[var(--color-muted)]">
+            Autre — {a.freeText.trim()}
+          </p>
+        )}
+      </div>
+    );
+  }
+  if (block.type === "single-select") {
+    const v = state.getSingleChoice(block.id);
+    const a = state.getAnswer(block.id);
+    return (
+      <div className="flex flex-col gap-1 text-sm text-[var(--color-fg)]">
+        <span>{v || DASH}</span>
+        {a.freeText.trim() && (
+          <p className="text-sm text-[var(--color-muted)]">
+            Autre — {a.freeText.trim()}
+          </p>
+        )}
+      </div>
+    );
+  }
+  if (block.type === "grouped-select") {
+    const a = state.getAnswer(block.id);
+    return (
+      <div className="flex flex-col gap-2 text-sm text-[var(--color-fg)]">
+        {block.groups.map((g) => {
+          const value =
+            g.selectionMode === "single"
+              ? state.getGroupedSingle(block.id, g.label)
+              : state.getGroupedMulti(block.id, g.label);
+          const display = Array.isArray(value)
+            ? value.length
+              ? value.join(", ")
+              : null
+            : value || null;
+          return (
+            <div key={g.label} className="flex flex-col">
+              <span className="text-xs text-[var(--color-muted)]">
+                {g.label}
+              </span>
+              <span>{display ?? DASH}</span>
+            </div>
+          );
+        })}
+        {a.freeText.trim() && (
+          <p className="text-sm text-[var(--color-muted)]">
+            {a.freeText.trim()}
+          </p>
+        )}
+      </div>
+    );
+  }
+  if (block.type === "free-text") {
+    return (
+      <div className="flex flex-col gap-2 text-sm text-[var(--color-fg)]">
+        {block.fields.map((f) => {
+          const v = state.getFieldValue(block.id, f.id);
+          return (
+            <div key={f.id} className="flex flex-col">
+              <span className="text-xs text-[var(--color-muted)]">
+                {f.label}
+              </span>
+              <span>{v.trim() ? v : DASH}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  // notes
+  const a = state.getAnswer(block.id);
+  return (
+    <div className="text-sm text-[var(--color-fg)] whitespace-pre-wrap">
+      {a.freeText.trim() ? a.freeText : DASH}
+    </div>
+  );
+}
+
+function BlockView({ block, state }: { block: Block; state: UseBriefState }) {
+  if (block.type === "text") {
+    return (
+      <dd className="font-serif text-base text-[var(--color-fg)]">
+        {state.getContent(block.id) || "—"}
+      </dd>
+    );
+  }
+  if (block.type === "composite") {
+    return (
+      <dd className="flex flex-col gap-3">
+        {block.blocks.map((sub) => (
+          <div key={sub.id} className="flex flex-col gap-1">
+            <span className="text-xs text-[var(--color-muted)]">
+              {sub.prompt}
+            </span>
+            <LeafView block={sub} state={state} />
+          </div>
+        ))}
+      </dd>
+    );
+  }
+  return (
+    <dd>
+      <LeafView block={block} state={state} />
+    </dd>
+  );
+}
+
+export function Recap({ steps, state, onPrev }: Props) {
   function handleDownload() {
-    generateBriefPdf(steps, getContent, getAnswer);
+    generateBriefPdf(steps, state);
   }
 
   return (
@@ -45,30 +174,7 @@ export function Recap({ steps, getContent, getAnswer, onPrev }: Props) {
                     <dt className="text-xs text-[var(--color-muted)]">
                       {heading}
                     </dt>
-                    {block.type === "text" ? (
-                      <dd className="font-serif text-base text-[var(--color-fg)]">
-                        {getContent(block.id) || "—"}
-                      </dd>
-                    ) : block.type === "multi-select" ? (
-                      <dd className="flex flex-col gap-1 text-sm text-[var(--color-fg)]">
-                        {getAnswer(block.id).checked.length > 0 ? (
-                          <ul className="list-disc pl-5">
-                            {getAnswer(block.id).checked.map((c) => (
-                              <li key={c}>{c}</li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <span className="text-[var(--color-muted)]">—</span>
-                        )}
-                        {getAnswer(block.id).freeText.trim() && (
-                          <p className="text-sm text-[var(--color-muted)]">
-                            Autre — {getAnswer(block.id).freeText.trim()}
-                          </p>
-                        )}
-                      </dd>
-                    ) : (
-                      <dd className="text-sm text-[var(--color-muted)]">—</dd>
-                    )}
+                    <BlockView block={block} state={state} />
                   </div>
                 );
               })}
