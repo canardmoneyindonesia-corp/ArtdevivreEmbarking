@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #F9F5F1;
+  --color-surface: #F1EAE0;
+  --color-fg: #593A29;
+  --color-muted: #8C7A6B;
+  --color-line: #E5D9CC;
+  --color-line-strong: #593A29;
+  --color-primary: #C1A48B;
+  --color-primary-hover: #A88971;
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+  --font-serif: var(--font-serif), ui-serif, Georgia, serif;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  overscroll-behavior: none;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--color-fg);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Airbnb-style gradient for primary CTA */
+.btn-airbnb-primary {
+  background: linear-gradient(
+    to right,
+    #e61e4d 0%,
+    #d70466 50%,
+    #bd1e59 100%
+  );
+}
+.btn-airbnb-primary:hover {
+  background: linear-gradient(
+    to right,
+    #d70466 0%,
+    #bd1e59 50%,
+    #a01a4f 100%
+  );
+}
