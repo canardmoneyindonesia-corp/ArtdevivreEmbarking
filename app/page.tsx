@@ -18,25 +18,32 @@ export default function Home() {
   }, [b.index, b.done]);
 
   useEffect(() => {
+    const TOLERANCE = 24;
     function check() {
       const doc = document.documentElement;
-      const scrollable = doc.scrollHeight - window.innerHeight > 1;
+      const viewportH = window.visualViewport?.height ?? window.innerHeight;
+      const scrollable = doc.scrollHeight - viewportH > TOLERANCE;
       if (!scrollable) {
         setAtBottom(true);
         return;
       }
-      const reached =
-        window.innerHeight + window.scrollY >= doc.scrollHeight - 2;
+      const scrollY = window.scrollY || window.pageYOffset || 0;
+      const reached = viewportH + scrollY >= doc.scrollHeight - TOLERANCE;
       setAtBottom(reached);
     }
     check();
-    window.addEventListener("scroll", check, { passive: true });
-    window.addEventListener("resize", check);
-    const ro = new ResizeObserver(check);
+    const raf = () => requestAnimationFrame(check);
+    window.addEventListener("scroll", raf, { passive: true });
+    window.addEventListener("resize", raf);
+    window.visualViewport?.addEventListener("resize", raf);
+    window.visualViewport?.addEventListener("scroll", raf);
+    const ro = new ResizeObserver(raf);
     ro.observe(document.body);
     return () => {
-      window.removeEventListener("scroll", check);
-      window.removeEventListener("resize", check);
+      window.removeEventListener("scroll", raf);
+      window.removeEventListener("resize", raf);
+      window.visualViewport?.removeEventListener("resize", raf);
+      window.visualViewport?.removeEventListener("scroll", raf);
       ro.disconnect();
     };
   }, [b.index, b.done]);
